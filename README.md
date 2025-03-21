@@ -1,1 +1,4 @@
-# chignolin_alalysis
+# Analysis
+
+## 处理轨迹相关
+1. 批量处理一个文件夹下的PDB文件，对其原子顺序重新排列、重新加H
