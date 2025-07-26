@@ -1,6 +1,7 @@
 from simtk import openmm, unit
 from simtk.openmm import app
 import numpy as np
+
 class DualTemperatureLangevinIntegrator(openmm.CustomIntegrator):
     def __init__(self, temperature_cold, temperature_hot, hot_atoms, friction_coeff, step_size):
         """
@@ -85,6 +86,38 @@ class DualTemperatureLangevinIntegrator(openmm.CustomIntegrator):
         
         # 设置新的local_kT值
         self.setPerDofVariableByName("local_kT", local_kT)
+
+    def getTemperature(self, context):
+        """
+        计算当前系统的整体温度 (单位: K)
+        使用公式 T = 2 * KE / (dof * R)，其中 dof 是自由度数
+        """
+        system = context.getSystem()
+        state = context.getState(getEnergy=True, getVelocities=True)
+        kinetic_energy = state.getKineticEnergy()  # 带单位，单位为 kJ/mol
+
+        # ==== 计算自由度 ====
+        dof = 0
+        for i in range(system.getNumParticles()):
+            if system.getParticleMass(i) > 0 * unit.dalton:
+                dof += 3
+
+        for i in range(system.getNumConstraints()):
+            p1, p2, _ = system.getConstraintParameters(i)
+            if system.getParticleMass(p1) > 0 * unit.dalton or system.getParticleMass(p2) > 0 * unit.dalton:
+                dof -= 1
+
+        if any(isinstance(system.getForce(i), openmm.CMMotionRemover) for i in range(system.getNumForces())):
+            dof -= 3
+
+        # ==== 计算温度 ====
+        if dof <= 0:
+            return 0.0  # 避免除以 0
+
+        R = unit.MOLAR_GAS_CONSTANT_R  # ≈ 0.0083145 kJ/(mol·K)
+        temperature = (2 * kinetic_energy) / (dof * R)
+        
+        return temperature.value_in_unit(unit.kelvin)
 
 class DualTemperatureReporter:
     """自定义报告器，记录系统总温度及分区域温度"""
